@@ -1,0 +1,8 @@
+FROM golang:1.7.3
+RUN mkdir -p /go/src/app
+COPY main.go /go/src/app
+WORKDIR /go/src/app
+RUN go get -d -v
+ENV https_proxy "http://172.31.1.3:8080"
+ENV http_proxy "http://172.31.1.3:8080"
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o app .
