@@ -1,0 +1,15 @@
+groups:
+  - name: prometheus/alert.rules
+    rules:
+    - alert: service_down
+      expr: up == 0
+    - alert: APIHighInvocationRate
+      expr: my_requests_total > 1
+      for: 5s
+      labels:
+        service: server
+        severity: major
+        value: '{{$value}}'
+      annotations:
+        description: High invocation total on {{ $labels.instance }}
+        summary: High invocation total on {{ $labels.instance }}

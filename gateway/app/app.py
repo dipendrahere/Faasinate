@@ -1,11 +1,23 @@
 import requests 
-from flask import Flask, request
+from flask import Flask, request, redirect
 from prometheus_client import Counter, start_http_server
 app = Flask(__name__)
 c = Counter('my_requests_total', 'HTTP Failures')
+
+gg = 'hello'
+
 @app.route('/')
 def welcome():
-	return 'hello'
+	return gg
+
+@app.route('/system/alert', methods = ['POST', 'GET'])
+def alert():
+	gg = 'bye'
+	return gg
+
+@app.route('/metrics')
+def metric():
+	return redirect('http://localhost:8000');
 
 @app.route('/functions/<path:url>', methods = ['POST'])
 def prints(url):
