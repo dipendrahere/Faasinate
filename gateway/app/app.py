@@ -12,8 +12,9 @@ def welcome():
 
 @app.route('/system/alert', methods = ['POST', 'GET'])
 def alert():
+	global gg
 	gg = 'bye'
-	return gg
+
 
 @app.route('/metrics')
 def metric():
