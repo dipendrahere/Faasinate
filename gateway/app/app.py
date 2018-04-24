@@ -13,7 +13,8 @@ def welcome():
 @app.route('/system/alert', methods = ['POST', 'GET'])
 def alert():
 	global gg
-	gg = 'bye'
+	gg = request.data
+	return gg
 
 
 @app.route('/metrics')
