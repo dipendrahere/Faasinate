@@ -5,7 +5,7 @@ groups:
       expr: up == 0
     - alert: APIHighInvocationRate
       expr: my_requests_total > 1
-      for: 5s
+      for: 2s
       labels:
         service: server
         severity: major

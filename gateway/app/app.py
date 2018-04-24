@@ -1,20 +1,28 @@
 import requests 
 from flask import Flask, request, redirect
+import docker
 from prometheus_client import Counter, start_http_server
 app = Flask(__name__)
 c = Counter('my_requests_total', 'HTTP Failures')
 
-gg = 'hello'
+wel = 'hello'
 
 @app.route('/')
 def welcome():
-	return gg
+	return wel
 
 @app.route('/system/alert', methods = ['POST', 'GET'])
 def alert():
-	global gg
-	gg = request.data
-	return gg
+	global wel
+	wel = request.data
+	client = docker.from_env()
+	sm = client.services
+	s = sm.get('server')
+	count = s.attrs['Spec']['Mode']['Replicated']['Replicas']
+	replicamode = docker.types.ServiceMode('replicated', replicas=count+1)
+	s.update(mode = replicamode)
+	return 
+	
 
 
 @app.route('/metrics')
