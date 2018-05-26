@@ -21,7 +21,7 @@ def alert():
 	count = s.attrs['Spec']['Mode']['Replicated']['Replicas']
 	replicamode = docker.types.ServiceMode('replicated', replicas=count+1)
 	s.update(mode = replicamode)
-	return 
+	return 200
 	
 
 

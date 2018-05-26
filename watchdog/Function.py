@@ -15,7 +15,6 @@ def makeTop(output=sys.stdout):
 \\lstset{
     numbers=left,               
     numberstyle=\\small \\ttfamily \\color[rgb]{0.4,0.4,0.4},
-                
     showspaces=false,               
     showstringspaces=false,         
     showtabs=false,                 
@@ -23,12 +22,10 @@ def makeTop(output=sys.stdout):
     tabsize=4,                      
     breaklines=true,                
     breakatwhitespace=false,        
-    basicstyle=\\ttfamily,
-    %identifierstyle=\\color[rgb]{0.3,0.133,0.133},   
+    basicstyle=\\ttfamily,   
     keywordstyle=\\color[rgb]{0.133,0.133,0.6},
     commentstyle=\\color[rgb]{0.133,0.545,0.133},
     stringstyle=\\color[rgb]{0.627,0.126,0.941},
-    language=%s
 }
 \\begin{document}
 '''

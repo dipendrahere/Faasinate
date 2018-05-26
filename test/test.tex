@@ -1,0 +1,467 @@
+
+\documentclass{article}
+\usepackage[hmargin=1in,vmargin=1in]{geometry}
+\usepackage{listings}
+\usepackage{color}
+\IfFileExists{lmodern.sty}{\usepackage{lmodern}}{}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\lstset{
+    numbers=left,               
+    numberstyle=\small \ttfamily \color[rgb]{0.4,0.4,0.4},
+    showspaces=false,               
+    showstringspaces=false,         
+    showtabs=false,                 
+    frame=lines,                    
+    tabsize=4,                      
+    breaklines=true,                
+    breakatwhitespace=false,        
+    basicstyle=\ttfamily,   
+    keywordstyle=\color[rgb]{0.133,0.133,0.6},
+    commentstyle=\color[rgb]{0.133,0.545,0.133},
+    stringstyle=\color[rgb]{0.627,0.126,0.941},
+}
+\begin{document}
+
+
+\begin{lstlisting}[language=Java]
+package com.example.dipendra.paygetping;
+
+import android.app.ProgressDialog;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.support.annotation.NonNull;
+import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
+import android.view.Menu;
+import android.view.MenuItem;
+import android.widget.Toast;
+
+import com.example.dipendra.paygetping.login.LoginActivity;
+import com.example.dipendra.paygetping.login.RegisterActivity;
+import com.example.dipendra.paygetping.models.User;
+import com.example.dipendra.paygetping.models.WalletListWrapper;
+import com.example.dipendra.paygetping.utils.Constants;
+import com.example.dipendra.paygetping.wallet.AddUserToList;
+import com.example.dipendra.paygetping.wallet.WalletsActivity;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthResult;
+import com.google.firebase.auth.FirebaseAuth;
+import com.google.firebase.auth.FirebaseUser;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.ValueEventListener;
+
+/**
+ * Created by dipendra on 06/04/17.
+ */
+
+public class BaseActivity extends AppCompatActivity {
+    protected FirebaseAuth auth;
+    protected ProgressDialog progressDialog;
+    protected SharedPreferences sp;
+    protected FirebaseAuth.AuthStateListener authStateListener;
+    protected User user;
+
+    public User getUser() {
+        return user;
+    }
+
+    public WalletListWrapper getCurrentList() {
+        return currentList;
+    }
+
+    protected WalletListWrapper currentList;
+    protected DatabaseReference reference;
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        auth = FirebaseAuth.getInstance();
+        authStateListener = new FirebaseAuth.AuthStateListener() {
+            @Override
+            public void onAuthStateChanged(@NonNull FirebaseAuth firebaseAuth) {
+                FirebaseUser firebaseUser = auth.getCurrentUser();
+                if(firebaseUser == null){
+                    getToLoginScreen();
+                }
+                else{
+                    readSharedPreferences();
+                    try {
+                        if (currentList.getOwnerID() != null && currentList.getOwnerID().equals(user.getEncodedEmail()) && BaseActivity.this instanceof MainActivity) {
+                            Constants.menu = R.menu.menu_main;
+                        }
+                        else  {
+                            Constants.menu = R.menu.menu_main_1;
+                        }
+                    }catch (Exception e){
+                        Log.e("TAG:: MAIN ACTIVITY", "Menu not yet created");
+                    }
+                    invalidateOptionsMenu();
+                }
+            }
+        };
+        initialize();
+    }
+    private void initialize(){
+        sp = PreferenceManager.getDefaultSharedPreferences(this);
+        user = new User();
+        currentList = new WalletListWrapper();
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setIndeterminate(true);
+        progressDialog.setCancelable(false);
+        if(Constants.isOnline(this) == false){
+            Toast.makeText(this, "Working Off-the line is not good! Please be online!", Toast.LENGTH_SHORT).show();
+        }
+    }
+    private void getToLoginScreen(){
+        Intent i = new Intent(BaseActivity.this, LoginActivity.class);
+        i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        startActivity(i);
+    }
+    protected void readSharedPreferences(){
+        sp = PreferenceManager.getDefaultSharedPreferences(this);
+        user.setEncodedEmail(sp.getString("encodedEmail", null));
+        user.setName(sp.getString("username", null));
+        String nameOfTheCurrentList = sp.getString("currentWalletName", null);
+        if(nameOfTheCurrentList == null && !(this instanceof WalletsActivity)){
+            Intent i = new Intent(this, WalletsActivity.class);
+            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            startActivity(i);
+        }
+        else{
+            currentList.setName(nameOfTheCurrentList);
+        }
+        currentList.setOwner(sp.getString("currentWalletOwner", null));
+        currentList.setPushId(sp.getString("currentWallet", null));
+        currentList.setOwnerID(sp.getString("currentWalletOwnerID", null));
+        try {
+            if (this instanceof MainActivity) {
+                getSupportActionBar().setTitle("Wallet : "+ currentList.getName());
+            }
+        }
+        catch (Exception e){
+            e.printStackTrace();
+        }
+       // Toast.makeText(this, "You are:"+ user.getName()+user.getEncodedEmail(), Toast.LENGTH_LONG).show();
+    }
+    @Override
+    protected void onStart() {
+        super.onStart();
+        if(!(this instanceof LoginActivity || this instanceof RegisterActivity)){
+            auth.addAuthStateListener(authStateListener);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+
+
+    @Override
+    protected void onStop() {
+        super.onStop();
+        if(authStateListener != null){
+            if(!(this instanceof LoginActivity || this instanceof RegisterActivity)) {
+                auth.removeAuthStateListener(authStateListener);
+            }
+        }
+    }
+    protected void signin(String usermail, String passwordString){
+        progressDialog = new ProgressDialog(this);
+        progressDialog.setMessage("Signing in.. Please Wait..");
+        progressDialog.setCancelable(false);
+        progressDialog.setIndeterminate(true);
+        progressDialog.show();
+        final String mail = usermail.replace(".",",");
+        auth.signInWithEmailAndPassword(usermail, passwordString).addOnCompleteListener(this, new OnCompleteListener<AuthResult>() {
+            @Override
+            public void onComplete(@NonNull Task<AuthResult> task) {
+                if(!task.isSuccessful()){
+                    progressDialog.hide();
+                    try{
+                        throw task.getException();
+                    } catch (Exception e) {
+                        Toast.makeText(BaseActivity.this, "Either Username or password is wrong",Toast.LENGTH_LONG).show();
+                    }
+                }
+                else{
+                    final SharedPreferences.Editor ed = sp.edit();
+                    reference = Constants.getDatabase().getReference().child("users").child(mail);
+                    reference.addListenerForSingleValueEvent(new ValueEventListener() {
+                        @Override
+                        public void onDataChange(DataSnapshot dataSnapshot) {
+                            user = dataSnapshot.getValue(User.class);
+                            ed.putString("username", user.getName());
+                            ed.putString("encodedEmail", user.getEncodedEmail());
+                            ed.commit();
+                            Intent i = new Intent(BaseActivity.this, MainActivity.class);
+                            i.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                            progressDialog.hide();
+                            startActivity(i);
+                        }
+
+                        @Override
+                        public void onCancelled(DatabaseError databaseError) {
+                            progressDialog.hide();
+                            Toast.makeText(BaseActivity.this, "Some Error Occured",Toast.LENGTH_SHORT).show();
+                        }
+                    });
+                }
+            }
+        });
+    }
+
+    @Override
+    public boolean onCreateOptionsMenu(Menu menu) {
+        getMenuInflater().inflate(Constants.menu, menu);
+        return true;
+    }
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        int id = item.getItemId();
+        if(id == R.id.logout){
+            signOutUser();
+        }
+        else if(id == R.id.add_user_to_list){
+            Intent i = new Intent(BaseActivity.this, AddUserToList.class);
+            startActivity(i);
+        }
+        return super.onOptionsItemSelected(item);
+    }
+    protected void signOutUser(){
+        auth.signOut();
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putString("encodedEmail", null);
+        editor.putString("username", null);
+        editor.putString("currentWallet", null);
+        editor.putString("currentWalletName", null);
+        editor.putString("currentWalletOwner", null);
+        editor.commit();
+        user = null;
+        getToLoginScreen();
+    }
+
+}
+
+\end{lstlisting}
+
+\end{document}
+                     mark2[(lc)+1] = 1;
+      //                  lazy2[node].p2 = lazy2[node].p5 = 0;
+		}
+		lazy2[node].p2 = lazy2[node].p5 = 0;
+		tree[node].r = 0;
+                return;
+        }
+        int m = (s+e)/2;
+        update2((lc),s,m,l,r,p2,p5);
+        update2(rc,m+1,e,l,r,p2,p5);
+        tree[node] = merge(tree[(lc)],tree[rc],tree[node].r);
+}
+struct node query(int node,int s,int e,int l,int r)
+{
+	int lc = (node<<1),rc = lc+1;
+/*	if(tree[node].r == 1){
+		if(s != e){
+			lazy[lc].p2 = lazy[lc].p5 = lazy[rc].p2 = lazy[rc].p5 = 0;
+            tree[lc].r = 1;
+            tree[lc].p2 = tree[lc].p5 = tree[(lc)+1].p2 = tree[(lc)+1].p5 = 0;
+            mark1[lc] = mark1[rc] = 0;
+            tree[rc].r = 1;
+		}
+		tree[node].r = 0;
+//		cout << "q : "<< s << " " << e << " " << pp2 << " " << pp5 << " " << endl;
+	}*/
+	if(s > e || s > r || e < l){
+                struct node tm;
+                tm.p2 = tm.p5 = tm.r = 0;
+                return tm;
+        }
+	if(mark2[node] != 0){
+  //              mark1[node] = 0;
+                tree[node].p2 = (lazy2[node].p2*(e-s+1));
+                tree[node].p5 = (lazy2[node].p5*(e-s+1));
+ /*               n = (e-lazy2[node].l + 1);
+                t2 = 2;
+                t5 = 5;
+                pp2 = pp5 = 0;
+                while(n/t2){
+                        pp2 += (n/t2);
+                        t2 *= 2;
+                }
+                while(n/t5){
+                        pp5 += (n/t5);
+                        t5 *= 5;
+                }
+                n = (s-lazy2[node].l);
+                t2 = 2;
+                t5 = 5;
+               // pp2 = pp5 = 0;
+                while(n/t2){
+                        pp2 -= (n/t2);
+                        t2 *= 2;
+                }
+                while(n/t5){
+                        pp5 -= (n/t5);
+                        t5 *= 5;
+                }*/
+		t2 = (e-lazy2[node].l + 1);
+		t5 = (s- lazy2[node].l);
+		pp2 = an[t2].p2 - an[t5].p2;
+		pp5 = an[t2].p5 - an[t5].p5;
+                tree[node].p2 += pp2;
+                tree[node].p5 += pp5;
+//                cout << "mark q2 :" << s << " " << e << " " << tree[node].p2 << " " << tree[node].p5 << endl;
+                if(s != e){
+                		lazy[lc].p2 = lazy[lc].p5 = lazy[rc].p2 = lazy[rc].p5 = 0;
+                       	mark1[lc] = mark1[rc] = 0;
+                        lazy2[(lc)].p2 = lazy2[node].p2;
+                        lazy2[rc].p5 = lazy2[node].p5;
+                        lazy2[(lc)].p5 = lazy2[node].p5;
+                        lazy2[rc].p2 = lazy2[node].p2;
+                        lazy2[(lc)].l = lazy2[node].l;
+                        lazy2[rc].l = lazy2[node].l;
+                        mark2[lc] = 1;
+                        mark2[(lc)+1] = 1;
+                }
+                lazy2[node].p2 = lazy2[node].p5 = 0;
+                mark2[node] = 0;
+	}
+	if(mark1[node] != 0){
+//				cout << "q : "<< s << " " << e << " " << pp2 << " " << pp5 << " " << endl;
+                tree[node].p2 += (lazy[node].p2*(e-s+1));
+                tree[node].p5 += (lazy[node].p5*(e-s+1));
+                if(s != e){
+                        lazy[(lc)].p2 += lazy[node].p2;
+                        lazy[rc].p5 += lazy[node].p5;
+                        lazy[(lc)].p5 += lazy[node].p5;
+                        lazy[rc].p2 += lazy[node].p2;
+                        mark1[lc] = 1;
+                        mark1[(lc)+1] = 1;
+                }
+                lazy[node].p2 = lazy[node].p5 = 0;
+                mark1[node] = 0;
+        }
+	if(l <= s && e <= r){
+//		cout << "qqmark :" << s << " " << e << " " << tree[node].p2 << " " << tree[node].p5 << endl;
+		return tree[node];
+	}
+	/*if(s > e || s > r || e < l){
+                struct node tm; 
+                tm.p2 = tm.p5 = tm.r = 0;
+                return tm;
+        }*/
+	int m = (s+e)>>1;
+	if(r <= m)
+		return query((lc),s,m,l,r);
+	else if(l > m)
+		return query(rc,m+1,e,l,r);
+	return merge(query((lc),s,m,l,r) , query(rc,m+1,e,l,r),0);
+}
+int main()
+{	int n2,c,t,i,j,v,op,x,y;
+	long long sum = 0;
+	struct node ans;
+	scanint(t);
+	for(i = 2;i <= 100001;i++){
+		n = i;
+		t2 = 2;
+                t5 = 5;
+                pp2 = pp5 = 0;
+                while(n/t2){
+                        pp2 += (n/t2);
+                        t2 *= 2;
+                }
+                while(n/t5){
+                        pp5 += (n/t5);
+                        t5 *= 5;
+                }
+/*                n = (s-lazy2[node].l);
+                t2 = 2;
+                t5 = 5;
+               // pp2 = pp5 = 0;
+                while(n/t2){
+                        pp2 -= (n/t2);
+                        t2 *= 2;
+                }
+                while(n/t5){
+                        pp5 -= (n/t5);
+                        t5 *= 5;
+                }*/
+		an[i].p2 = pp2;
+		an[i].p5 = pp5;
+	}
+	while(t--){
+	//	cout << "t : " << t << endl;
+		sum = 0;
+		scanint(n2);
+		scanint(c);
+		for(i = 0;i < 400005 ;i++){
+			tree[i].p2 = tree[i].p5 = tree[i].r = 0;
+			mark2[i] = mark1[i] = 0;
+			lazy[i].p2 = lazy[i].p5 = lazy2[i].p2 = lazy2[i].p5 = lazy2[i].l = 0;
+		}
+		for(i = 1;i <= n2;i++){
+			scanint(a[i]);
+		}
+		build(1,1,n2);	
+		while(c--){
+	//		cout <<"c : "  << c << " " << endl;
+			scanint(op);
+			if(op == 1){
+				scanint(i);
+				scanint(j);
+				scanint(x);
+			//	cout << c << endl;
+				n = x;
+                		pp2 = pp5 = 0;
+                		while(n%2 == 0){
+                        		pp2++;
+                        		n = n>>1;
+                		}
+                		while(n%5 == 0){
+                        		pp5++;
+                        		n /= 5;
+                		}
+//				cout << pp2 << pp5 << endl;
+				update1(1,1,n2,i,j,pp2,pp5);
+			}
+			else if(op == 2){
+				scanint(i);
+				scanint(j);
+				scanint(y);
+			//	cout << c << endl;
+				n = y;
+                                pp2 = pp5 = 0;
+                                while(n%2 == 0){
+                                        pp2++;
+                                        n = n/2;
+                                }
+                                while(n%5 == 0){
+                                        pp5++;
+                                        n /= 5;
+                                }
+                                update2(1,1,n2,i,j,pp2,pp5);
+			}
+			else{
+			//	cout << c << endl;
+				scanint(i);
+				scanint(j);
+				ans = query(1,1,n2,i,j);
+	//			cout << ans.p2 << " " <<ans.p5 << endl;
+				sum += min(ans.p2,ans.p5);
+			}
+		}
+		printf("%lld\n",sum);
+	}
+}
+
+\end{lstlisting}
+
+\end{document}
