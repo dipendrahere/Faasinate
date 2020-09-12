@@ -30,8 +30,6 @@ python test/tester.py
 
 ## Naive Example
 
-Amazon :
-
 ```
 Lightweight and low-traffic website
 ```
